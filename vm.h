@@ -48,5 +48,6 @@ size_t vm_add_inst(vm_env *, vm_inst);
 void vm_hook_opcode_handler(vm_env *, int, vm_handler);
 
 void vm_run(vm_env *env);
+void vm_set_temp_value(vm_env *, int, int);
 
 #endif /* VM_H */

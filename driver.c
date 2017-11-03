@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 #include "as.h"
 #include "opcode.h"
@@ -15,13 +16,14 @@ typedef enum {
     LOAD_ELF_AND_EVAL       /* -x */
 } req_t;
 
-#define help_text                                                           \
-    "Usage: as_exec [-w] [-x] [-o <out_file>] <in_file>\n"                  \
-    "       -w Assemble <in_file> and write to an ELF file, see -o below\n" \
-    "       -o if -w is specifed, <out_file> is used to store the object "  \
-    "code\n"                                                                \
-    "       -x Load <in_file> and execute it\n"                             \
-    "\n"                                                                    \
+#define help_text                                                            \
+    "Usage: as_exec [-w] [-x] [-o <out_file>] [--input <value>] <in_file>\n" \
+    "       -w Assemble <in_file> and write to an ELF file, see -o below\n"  \
+    "       -o if -w is specifed, <out_file> is used to store the object "   \
+    "code\n"                                                                 \
+    "       --input set #0 to initial integer <value>\n"                     \
+    "       -x Load <in_file> and execute it\n"                              \
+    "\n"                                                                     \
     "       <in_file> the file name to be used by commands above"
 
 int main(int argc, char **argv)
@@ -32,11 +34,18 @@ int main(int argc, char **argv)
     int ignore_option = 0;
     int out_fd = -1;
     int in_fd = -1;
-
+    int temp_init_val = 0;
     for (int i = 1; i < argc; i++) {
         if (ignore_option)
             in_file = argv[i];
-        else if (!strcmp(argv[i], "--")) /* support filename begin with '-' */
+        else if (!strcmp(argv[i], "--input")) {
+            char *pEnd;
+            if (!argv[i + 1])
+                FATAL(-1, "--input need a integer as argument, see -h\n");
+            temp_init_val = strtol(argv[++i], &pEnd, 10);
+            if (*pEnd)
+                FATAL(-1, "--input need a integer as argument, see -h\n");
+        } else if (!strcmp(argv[i], "--")) /* support filename begin with '-' */
             ignore_option = 1;
         else if (!strcmp(argv[i], "-h")) {
             printf("%s\n", help_text);
@@ -104,6 +113,7 @@ int main(int argc, char **argv)
     switch (req) {
     case ASSEMBLE_AND_EVAL: {
         vm_env *env = vm_new();
+        vm_set_temp_value(env, 0, temp_init_val);
         assemble_from_fd(env, in_fd);
         hook_opcodes(env);
         vm_run(env);
@@ -114,6 +124,7 @@ int main(int argc, char **argv)
         int len;
 
         vm_env *env = vm_new();
+        vm_set_temp_value(env, 0, temp_init_val);
         assemble_from_fd(env, in_fd);
         len = write_to_elf(env, out_fd);
         vm_free(env);
@@ -124,6 +135,7 @@ int main(int argc, char **argv)
     }
     case LOAD_ELF_AND_EVAL: {
         vm_env *env = vm_new();
+        vm_set_temp_value(env, 0, temp_init_val);
         load_from_elf(env, in_fd);
         hook_opcodes(env);
         vm_run(env);
