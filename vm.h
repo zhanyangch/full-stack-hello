@@ -13,7 +13,8 @@ typedef struct {
 typedef void (*vm_handler)(VM_HANDLER_ARGS);
 
 typedef struct {
-    enum { CONST, TEMP } type;
+    enum { CONST, TEMP, LABEL } type;
+    char *label;
     union {
         int id;
     } value;
@@ -25,6 +26,11 @@ typedef struct {
     vm_operand op2;
     int result;
 } vm_inst;
+
+typedef struct {
+    char *label;
+    int next_pc;
+} vm_label;
 
 typedef struct {
     int opcode;
@@ -44,10 +50,14 @@ void vm_free(vm_env *);
 
 size_t vm_add_const(vm_env *, int, void *);
 size_t vm_add_inst(vm_env *, vm_inst);
+size_t vm_add_label(vm_env *, char *);
+size_t vm_add_label_ref(vm_env *, vm_operand *);
 
 void vm_hook_opcode_handler(vm_env *, int, vm_handler);
 
 void vm_run(vm_env *env);
 void vm_set_temp_value(vm_env *, int, int);
+int vm_find_label(vm_env *, const char *);
+void vm_register_label(vm_env *);
 
 #endif /* VM_H */

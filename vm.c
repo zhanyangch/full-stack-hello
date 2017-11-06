@@ -4,6 +4,7 @@
 #include "vm.h"
 #include "vm_codegen.h"
 #include "opcode.h"
+#include "private.h"
 
 #if !defined(__GNUC__)
 #error "Only gcc is supported at present"
@@ -86,6 +87,8 @@ static inline void vm_push(vm_env *env, size_t n);
 /* OPCODE impl max size */
 #define OPCODE_IMPL_MAX_SIZE 256
 
+#define LABELS_MAX_SIZE 256
+
 typedef struct {
     size_t pc;    // program counter.
     size_t sp;    // stack runs from the end of 'temps' region.
@@ -98,10 +101,14 @@ struct __vm_env {
     vm_value cpool[CPOOL_MAX_SIZE];            /* Constant pool */
     vm_value temps[TEMPS_MAX_SIZE];            /* Temporary storage */
     vm_opcode_impl impl[OPCODE_IMPL_MAX_SIZE]; /* OPCODE impl */
+    vm_label labels[LABELS_MAX_SIZE];
+    vm_operand *label_ref[LABELS_MAX_SIZE];
     vm_regs r;
     int insts_count;
     int cpool_count;
     int temps_count;
+    int labels_count;
+    int label_refcnt;
 };
 
 struct __vm_seg_info {
@@ -142,10 +149,48 @@ size_t vm_add_const(vm_env *env, int type, void *value)
 size_t vm_add_inst(vm_env *env, vm_inst inst)
 {
     env->insts[env->insts_count] = inst;
-
+    if (inst.op1.type == LABEL)
+        vm_add_label_ref(env, &env->insts[env->insts_count].op1);
+    if (inst.op2.type == LABEL)
+        vm_add_label_ref(env, &env->insts[env->insts_count].op2);
     return env->insts_count++;
 }
 
+size_t vm_add_label(vm_env *env, char *label)
+{
+    if (vm_find_label(env, label) != -1)
+        FATALX(1, "Label '%s' redefinition\n", label);
+    env->labels[env->labels_count].label = strdup(label);
+    env->labels[env->labels_count].next_pc = env->insts_count;
+    return env->labels_count++;
+}
+
+size_t vm_add_label_ref(vm_env *env, vm_operand *op)
+{
+    env->label_ref[env->label_refcnt] = op;
+    return env->label_refcnt++;
+}
+
+int vm_find_label(vm_env *env, const char *label)
+{
+    for (int i = 0; i < env->labels_count; ++i) {
+        if (!strcmp(env->labels[i].label, label)) {
+            return env->labels[i].next_pc;
+        }
+    }
+    return -1;
+}
+
+void vm_register_label(vm_env *env)
+{
+    for (int i = 0; i < env->label_refcnt; ++i) {
+        env->label_ref[i]->value.id =
+            vm_find_label(env, env->label_ref[i]->label);
+        if (env->label_ref[i]->value.id == -1)
+            FATALX(1, "Label Register Error: Label \"%s\" not found\n",
+                   env->label_ref[i]->label);
+    }
+}
 static inline void vm_push(vm_env *env, size_t n)
 {
     env->r.sp--;

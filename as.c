@@ -154,7 +154,13 @@ static char *quoted_strdup(const char *data)
         return strdup(data);
     }
 }
-
+static char *rm_comment_strdup(const char *data)
+{
+    int i = 0;
+    while (data[i] != '\0' && data[i] != ';' && data[i] != '\n')
+        i++;
+    return strndup(data, i);
+}
 static const struct instruction *find_inst(const char *name)
 {
     for (int i = 0; instrs[i].name; ++i)
@@ -189,6 +195,10 @@ static inline vm_operand make_operand(vm_env *env, char *line, const char *data)
         op.type = CONST;
         op.value.id = vm_add_const(env, STR, quoted_strdup(data));
         break;
+    case ':':
+        op.type = LABEL;
+        op.label = rm_comment_strdup(data + 1);
+        break;
     default:
         printf(
             "Error: please specify operand type for '%s' in the following "
@@ -197,7 +207,8 @@ static inline vm_operand make_operand(vm_env *env, char *line, const char *data)
             "Supported types:\n"
             "       $ (constant integer)\n"
             "       # (temp integer)\n"
-            "       \" (string literal)\n",
+            "       \" (string literal)\n"
+            "       : (label name)",
             data, line);
         free(line);
         exit(-1);
@@ -235,14 +246,30 @@ static void assemble_line(vm_env *env, char *line)
 {
     char *line_backup = strdup(line);
     char *mnemonic = quoted_strsep(&line, " ");
+    const struct instruction *inst = find_inst(mnemonic);
+
+    if (!inst) {
+        int mlen = strlen(mnemonic);
+        if (mlen > 1 && mnemonic[mlen - 1] == ':') {
+            mnemonic[mlen - 1] = '\0';
+            vm_add_label(env, mnemonic);
+            mnemonic = quoted_strsep(&line, " ");
+            if (mnemonic) {
+                inst = find_inst(mnemonic);
+                if (!inst)
+                    FATALX(1, "instruction `%s' not found\n", mnemonic);
+            } else {
+                free(line_backup);
+                return;
+            }
+        } else
+            FATALX(1, "instruction `%s' not found\n", mnemonic);
+    }
+
     char *op1 = quoted_strsep(&line, " ");
     char *op2 = quoted_strsep(&line, " ");
     char *result = quoted_strsep(&line, " ");
     vm_inst new_inst;
-    const struct instruction *inst = find_inst(mnemonic);
-
-    if (!inst)
-        FATALX(1, "instruction `%s' not found\n", mnemonic);
 
     memset(&new_inst, 0, sizeof(vm_inst));
 

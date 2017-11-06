@@ -115,6 +115,7 @@ int main(int argc, char **argv)
         vm_env *env = vm_new();
         vm_set_temp_value(env, 0, temp_init_val);
         assemble_from_fd(env, in_fd);
+        vm_register_label(env);
         hook_opcodes(env);
         vm_run(env);
         vm_free(env);
@@ -126,6 +127,7 @@ int main(int argc, char **argv)
         vm_env *env = vm_new();
         vm_set_temp_value(env, 0, temp_init_val);
         assemble_from_fd(env, in_fd);
+        vm_register_label(env);
         len = write_to_elf(env, out_fd);
         vm_free(env);
         if (len < 0)
